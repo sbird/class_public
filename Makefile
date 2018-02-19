@@ -17,12 +17,20 @@ vpath .base build
 ########################################################
 
 # your C compiler:
-CC       = gcc -Wall #-g -pg -E#-ggdb
-#CC       = icc #-ggdb
+CC       = gcc
+#CC       = icc
 #CC       = pgcc
 
 # your tool for creating static libraries:
 AR        = ar rv
+
+# Your python interpreter.
+# In order to use Python 3, you can manually
+# substitute python3 to python in the line below, or you can simply
+# add a compilation option on the terminal command line:
+# "PYTHON=python3 make all" (THanks to Marius Millea for pyhton3
+# compatibility)
+PYTHON ?= python
 
 # your optimization flag
 OPTFLAG = -O4 -ffast-math #-march=native
@@ -97,6 +105,8 @@ CLASS = class.o
 
 TEST_LOOPS = test_loops.o
 
+TEST_LOOPS_OMP = test_loops_omp.o
+
 TEST_DEGENERACY = test_degeneracy.o
 
 TEST_TRANSFER = test_transfer.o
@@ -111,6 +121,8 @@ TEST_BACKGROUND = test_background.o
 
 TEST_SIGMA = test_sigma.o
 
+TEST_HYPERSPHERICAL = test_hyperspherical.o
+
 TEST_STEPHANE = test_stephane.o
 
 C_TOOLS =  $(addprefix tools/, $(addsuffix .c,$(basename $(TOOLS))))
@@ -122,12 +134,9 @@ H_ALL = $(addprefix include/, common.h svnversion.h $(addsuffix .h, $(basename $
 PRE_ALL = cl_ref.pre clt_permille.pre
 INI_ALL = explanatory.ini lcdm.ini
 MISC_FILES = Makefile CPU psd_FD_single.dat myselection.dat myevolution.dat README bbn/sBBN.dat external_Pk/* cpp
-PYTHON = python/classy.pyx python/setup.py python/cclassy.pxd python/test_class.py
+PYTHON_FILES = python/classy.pyx python/setup.py python/cclassy.pxd python/test_class.py
 
-
-
-
-all: class libclass.a
+all: class libclass.a classy
 
 libclass.a: $(TOOLS) $(SOURCE) $(EXTERNAL)
 	$(AR)  $@ $(addprefix build/, $(TOOLS) $(SOURCE) $(EXTERNAL))
@@ -141,30 +150,48 @@ test_sigma: $(TOOLS) $(SOURCE) $(EXTERNAL) $(OUTPUT) $(TEST_SIGMA)
 test_loops: $(TOOLS) $(SOURCE) $(EXTERNAL) $(OUTPUT) $(TEST_LOOPS)
 	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -o $@ $(addprefix build/,$(notdir $^)) -lm
 
+test_loops_omp: $(TOOLS) $(SOURCE) $(EXTERNAL) $(OUTPUT) $(TEST_LOOPS_OMP)
+	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -o $@ $(addprefix build/,$(notdir $^)) -lm
+
 test_stephane: $(TOOLS) $(SOURCE) $(EXTERNAL) $(OUTPUT) $(TEST_STEPHANE)
 	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -o $@ $(addprefix build/,$(notdir $^)) -lm
 
 test_degeneracy: $(TOOLS) $(SOURCE) $(EXTERNAL) $(OUTPUT) $(TEST_DEGENERACY)
 	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -o $@ $(addprefix build/,$(notdir $^)) -lm
 
-test_transfer: $(TOOLS) $(INPUT) $(BACKGROUND) $(THERMO) $(PERTURBATIONS) $(PRIMORDIAL) $(NONLINEAR) $(TRANSFER) $(EXTERNAL) $(TEST_TRANSFER)
+test_transfer: $(TOOLS) $(SOURCE) $(EXTERNAL) $(TEST_TRANSFER)
 	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -o  $@ $(addprefix build/,$(notdir $^)) -lm
 
-test_nonlinear: $(TOOLS) $(INPUT) $(BACKGROUND) $(THERMO) $(PERTURBATIONS) $(PRIMORDIAL) $(NONLINEAR) $(EXTERNAL) $(TEST_NONLINEAR)
+test_nonlinear: $(TOOLS) $(SOURCE) $(EXTERNAL) $(TEST_NONLINEAR)
 	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -o  $@ $(addprefix build/,$(notdir $^)) -lm
 
-test_perturbations: $(TOOLS) $(INPUT) $(BACKGROUND) $(THERMO) $(PERTURBATIONS) $(EXTERNAL) $(TEST_PERTURBATIONS)
+test_perturbations: $(TOOLS) $(SOURCE) $(EXTERNAL) $(TEST_PERTURBATIONS)
 	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -o  $@ $(addprefix build/,$(notdir $^)) -lm
 
-test_thermodynamics: $(TOOLS) $(INPUT) $(BACKGROUND) $(THERMO) $(EXTERNAL) $(TEST_THERMODYNAMICS)
+test_thermodynamics: $(TOOLS) $(SOURCE) $(EXTERNAL) $(TEST_THERMODYNAMICS)
 	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -o  $@ $(addprefix build/,$(notdir $^)) -lm
 
-test_background: $(TOOLS) $(INPUT) $(BACKGROUND) $(TEST_BACKGROUND)
+test_background: $(TOOLS) $(SOURCE) $(EXTERNAL) $(TEST_BACKGROUND)
 	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -o  $@ $(addprefix build/,$(notdir $^)) -lm
 
-tar: $(C_ALL) $(C_TEST) $(H_ALL) $(PRE_ALL) $(INI_ALL) $(MISC_FILES) $(HYREC) $(PYTHON)
-	tar czvf class.tar.gz $(C_ALL) $(H_ALL) $(PRE_ALL) $(INI_ALL) $(MISC_FILES) $(HYREC) $(PYTHON)
+test_hyperspherical: $(TOOLS) $(TEST_HYPERSPHERICAL)
+	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -o test_hyperspherical $(addprefix build/,$(notdir $^)) -lm
+
+
+tar: $(C_ALL) $(C_TEST) $(H_ALL) $(PRE_ALL) $(INI_ALL) $(MISC_FILES) $(HYREC) $(PYTHON_FILES)
+	tar czvf class.tar.gz $(C_ALL) $(H_ALL) $(PRE_ALL) $(INI_ALL) $(MISC_FILES) $(HYREC) $(PYTHON_FILES)
+
+classy: libclass.a python/classy.pyx python/cclassy.pxd
+ifdef OMPFLAG
+	cp python/setup.py python/autosetup.py
+else
+	grep -v "lgomp" python/setup.py > python/autosetup.py
+endif
+	cd python; export CC=$(CC); $(PYTHON) autosetup.py install || $(PYTHON) autosetup.py install --user
+	rm python/autosetup.py
 
 clean: .base
 	rm -rf $(WRKDIR);
 	rm -f libclass.a
+	rm -f $(MDIR)/python/classy.c
+	rm -rf $(MDIR)/python/build
