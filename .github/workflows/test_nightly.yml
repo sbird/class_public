@@ -2,9 +2,9 @@ name: Nosetests and Valgrind
 
 # To run this workflow on other branches than devel, uncomment line 4 and comment line 5-7.
 #on: [push]
-on:
-  schedule:
-    - cron: '0 20 * * *'  # Daily at UTC 20:00
+#on:
+#  schedule:
+#    - cron: '0 20 * * *'  # Daily at UTC 20:00
 
 jobs:
   iftest:
